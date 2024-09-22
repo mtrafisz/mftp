@@ -2,7 +2,7 @@
 
 ## **Connection Establishment**
 
-   - The client connects to the server by providing an IP address or domain name and a port number (default port is 28).
+   - The client connects to the server by providing an IP address or domain name and a port number (default port is 6666).
    - The server and client exchange login credentials (username and password).
    - The server sends client address and port to data channel - like passive mode in FTP
 

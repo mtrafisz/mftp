@@ -12,7 +12,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "proto/mftp.h"
+#include "proto/config.h"
 
 sig_atomic_t running = true;
 void handle_sigpipe(int sig) {
@@ -116,6 +116,7 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in serv_addr = {0};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
+    // serv_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (!inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr.s_addr)) {
         fprintf(stderr, "inet_pton() failed\n");
         errcode = 1;

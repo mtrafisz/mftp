@@ -1,7 +1,14 @@
 cmake_minimum_required (VERSION 3.15)
 project (mftp)
 
-add_executable (test-server source/test-server.c)
-target_link_libraries(test-server pthread)
+file (GLOB_RECURSE LIB_PROTO_SOURCES "./source/proto/*.c*")
+add_library(${PROJECT_NAME} ${LIB_PROTO_SOURCES})
 
-add_executable (test-client source/test-client.c)
+add_executable("server_${PROJECT_NAME}" source/server.c)
+target_link_libraries("server_${PROJECT_NAME}" ${PROJECT_NAME} pthread)
+
+add_executable("test_client" source/test-client.c)
+target_link_libraries(${PROJECT_NAME})
+
+add_executable("test_dumper" source/test-dumper.c)
+target_link_libraries(${PROJECT_NAME})
