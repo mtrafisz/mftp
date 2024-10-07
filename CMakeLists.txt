@@ -1,14 +1,24 @@
-cmake_minimum_required (VERSION 3.15)
-project (mftp)
+cmake_minimum_required(VERSION 3.25)
+project(mftp C)
 
-file (GLOB_RECURSE LIB_PROTO_SOURCES "./source/proto/*.c*")
-add_library(${PROJECT_NAME} ${LIB_PROTO_SOURCES})
+set(CMAKE_C_STANDARD 99)
 
-add_executable("server_${PROJECT_NAME}" source/server.c)
-target_link_libraries("server_${PROJECT_NAME}" ${PROJECT_NAME} pthread)
+set(EXTERNAL_PATH ${CMAKE_SOURCE_DIR}/external)
 
-add_executable("test_client" source/test-client.c)
-target_link_libraries(${PROJECT_NAME})
+link_directories(${EXTERNAL_PATH}/lib)
+include_directories(${EXTERNAL_PATH}/include)
 
-add_executable("test_dumper" source/test-dumper.c)
-target_link_libraries(${PROJECT_NAME})
+set(LIBUEV ${EXTERNAL_PATH}/lib/libuev.a)
+
+file(GLOB_RECURSE SHARED_SRC src/shared/*.c* src/shared/*.h*)
+add_library(mftp-shared ${SHARED_SRC})
+
+include_directories(src)
+
+file(GLOB_RECURSE SERVER_SRC src/server/*.c* src/server/*.h*)
+add_executable(mftp-server ${SERVER_SRC})
+target_link_libraries(mftp-server mftp-shared ${LIBUEV})
+
+file(GLOB_RECURSE CLIENT_CLI_SRC src/client-cli/*.c* src/client-cli/*.h*)
+add_executable(mftp-client-cli ${CLIENT_CLI_SRC})
+target_link_libraries(mftp-client-cli mftp-shared)

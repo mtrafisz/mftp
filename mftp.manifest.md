@@ -4,11 +4,11 @@
 
    - The client connects to the server by providing an IP address or domain name and a port number (default port is 6666).
    - The server and client exchange login credentials (username and password).
-   - The server sends client address and port to data channel - like passive mode in FTP
+   - The server sends client address and port to data channel - like passive mode in FTP.
 
 ## **Command & Data Channels**
 
-   - FTP uses two channels: **command** (port 6666) and **data** (random port).
+   - MFTP uses two channels: **command** (port 6666) and **data** (random port).
    - The **command channel** sends commands from the client (like "list files" or "download") and receives responses from the server.
    - The **data channel** is used to transfer files or directory listings.
 
@@ -24,8 +24,9 @@
    - `SIZE <filepath>`: Get size of file.
    - `USER <username>`: Provide authentication user.
    - `PASS <password>`: Provide authentication password.
+   - `WAMI`: Get username of currently logged-in user.
    - `QUIT`: Disconnect.
-   - `RNME <dirname:new-dirname>`: Rename item.
+   - `RNME <itemname:new-itemname>`: Rename item.
    - `NOOP`: Dummy packet.
    - `ABOR`: Abort transfer.
    - `MDTM <filepath>`: Get last modified datetime.
@@ -82,7 +83,7 @@ ERR 530 Not logged in\r\n
   - x2x - network connection / communication
   - x3x - authentication / policy
 
-### Sample server codes:
+### Sample server code meaning:
 
   - `120` - Opening data channel
   - `200` - General success
@@ -101,5 +102,6 @@ ERR 530 Not logged in\r\n
   - `501` - Command expected an argument, but none was provided
   - `502` - Argument to command was somehow invalid
   - `503` - Command isn't implemented on this server
+  - `504` - Command not expected now
   - `530` - Policy prevents anonymous login
   - `630` - Username OK, provide password

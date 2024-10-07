@@ -1,3 +1,4 @@
-build
+*build*
 *.tar.gz
 .vscode
+*.log
