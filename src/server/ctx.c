@@ -13,14 +13,11 @@
 #include <sys/socket.h>
 
 void mftp_server_remove_client_data_watcher(mftp_server_ctx_t* server_ctx, uev_t* watcher) {
-    log_info("REQUESTED TO REMOVE WATCHER");
-
     list_iter_t iter = list_iter(&server_ctx->client_data_watchers);
     uev_t* w; int i = 0;
 
     while ((w = list_next(&iter)) != NULL) {
         if (w->fd == watcher->fd) {
-            log_info("FOUND WATCHER TO REMOVE");
             uev_io_stop(w);
             client_ctx_cleanup_full((mftp_client_ctx_t*)w->arg);
             list_remove(&server_ctx->client_data_watchers, i);
@@ -105,8 +102,6 @@ void client_ctx_cleanup_transfer(mftp_client_ctx_t* ctx) {
 }
 
 void client_ctx_cleanup_full(mftp_client_ctx_t* ctx) {
-    log_info("CLEANING UP AFTER CLIENT");
-
     if (ctx->locked) return;
     ctx->locked = true;
 
