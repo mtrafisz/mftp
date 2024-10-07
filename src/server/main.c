@@ -106,7 +106,7 @@ process:
         log_info("Invalid command from client %d: %s", client_ctx->cmd_fd, client_ctx->cmd_buf);
 
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
-        return;
+        goto reset_buffer;
     }
 
     /* Filter out unauthenticated clients */
@@ -119,8 +119,7 @@ process:
         };
 
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
-        client_ctx->cmd_buf_len = 0;
-        return;
+        goto reset_buffer;
     }
 
     log_info("[CLIENT %d] %s %s", client_ctx->cmd_fd, mftp_ctoa(cmd.cmd), cmd.cmd == MFTP_CMD_PASS ? "********" : cmd.data);
@@ -162,6 +161,7 @@ process:
 
     // micro "cleanup" after command:
     // memset(client_ctx->cmd_buf, 0, client_ctx->cmd_buf_len);
+reset_buffer:
     client_ctx->cmd_buf_len = 0;
     return;
 
@@ -178,7 +178,8 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
     }
 
     mftp_server_ctx_t *server_ctx = (mftp_server_ctx_t *)arg;
-    if (server_ctx->client_data_watchers_count >= server_ctx->cfg.max_clients) {
+    // if (server_ctx->client_data_watchers_count >= server_ctx->cfg.max_clients) {
+    if (server_ctx->client_data_watchers.size >= server_ctx->cfg.max_clients) {
         log_info("Max clients reached - rejecting connection");
         return;
     }
@@ -203,8 +204,11 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
         return;
     }
 
-    uev_io_init(w->ctx, client_ctx->cmd_watcher, client_data_callback, client_ctx, client_cmd_fd, UEV_READ);
-    mftp_server_add_client_data_watcher(server_ctx, client_ctx->cmd_watcher);
+    uev_t* client_data_watcher = malloc(sizeof(uev_t));
+
+    uev_io_init(w->ctx, client_data_watcher, client_data_callback, client_ctx, client_cmd_fd, UEV_READ);
+    // mftp_server_add_client_data_watcher(server_ctx, client_ctx->cmd_watcher);
+    list_insert(&server_ctx->client_data_watchers, client_data_watcher, LIST_BACK);
 
     mftp_server_msg_t msg = {
         .kind = MFTP_MSG_OK,
@@ -259,8 +263,9 @@ int main(int argc, char* argv[]) {
         .fd = server_socket.fd,
         .user_creds = s_creds,
         .user_creds_count = s_creds_count,
-        .client_data_watchers = malloc(s_cfg.max_clients * sizeof(uev_t)),
-        .client_data_watchers_count = 0,
+        .client_data_watchers = list_new(uev_t),
+        // .client_data_watchers = malloc(s_cfg.max_clients * sizeof(uev_t)),
+        // .client_data_watchers_count = 0,
     };
 
     uev_t server_watcher;

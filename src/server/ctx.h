@@ -7,6 +7,8 @@
 
 #include <uev.h>
 
+#include "shared/list.h"
+
 typedef struct {
     char username[32];
     char passwd[32];
@@ -30,13 +32,9 @@ typedef struct {
     int fd;
     mftp_creds_t* user_creds;
     size_t user_creds_count;
-    uev_t* client_data_watchers; // always cfg.max_clients long
-    size_t client_data_watchers_count;
+    list_t client_data_watchers;
 } mftp_server_ctx_t;
 
-uev_t* mftp_server_find_next_active_client_data_watcher(const mftp_server_ctx_t* server_ctx);
-uev_t* mftp_server_find_next_empty_client_data_watcher(const mftp_server_ctx_t* server_ctx);
-void mftp_server_add_client_data_watcher(mftp_server_ctx_t* server_ctx, uev_t* watcher);
 void mftp_server_remove_client_data_watcher(mftp_server_ctx_t* server_ctx, uev_t* watcher);
 void mftp_server_cleanup_full(mftp_server_ctx_t* server_ctx);
 
@@ -47,8 +45,6 @@ typedef struct {
     size_t cmd_buf_len;
     pthread_t cmd_tid;
     uev_t* cmd_watcher;
-    // command channel can't time out
-    bool cmd_cleanup_in_progress;
 
     // server context:
     mftp_server_ctx_t *server_ctx;
@@ -64,10 +60,10 @@ typedef struct {
     pthread_t t_tid;
     uev_t* t_watcher;
     uev_t* t_timeout_watcher;
-    bool t_cleanup_in_progress;
 
     // general state:
-    char* cwd;
+    char cwd[PATH_MAX]; // relative to server_ctx->cfg.root_dir
+    bool locked; // some process is already using this context (it may be cleaned up) - abort whatever you want to do.
 } mftp_client_ctx_t;
 
 bool client_ctx_init(mftp_client_ctx_t* ctx, int cmd_fd, mftp_server_ctx_t* server_ctx);

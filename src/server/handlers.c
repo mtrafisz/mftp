@@ -99,8 +99,8 @@ void data_accept_callback(uev_t* w, void* arg, int events) {
     mftp_client_ctx_t* client_ctx = (mftp_client_ctx_t*)arg;
     mftp_server_ctx_t* server_ctx = client_ctx->server_ctx;
 
-    if (client_ctx->t_cleanup_in_progress) return;
-    client_ctx->t_cleanup_in_progress = true;
+    if (client_ctx->locked) return;
+    client_ctx->locked = true;
     uev_timer_stop(client_ctx->t_timeout_watcher);
     uev_io_stop(client_ctx->t_watcher);
 
@@ -120,11 +120,14 @@ void data_accept_callback(uev_t* w, void* arg, int events) {
     *data_fd_ptr = accept(w->fd, NULL, NULL);
     if (*data_fd_ptr < 0) {
         log_syserr("Failed to accept data connection"); // should not happen - READ was triggered, but no connection can be accepted.
+        client_ctx->locked = false;
         return;
     }
 
     pthread_create(&client_ctx->t_tid, NULL, transfer_thread, client_ctx);
     pthread_detach(client_ctx->t_tid);
+
+    client_ctx->locked = false;
 
     return;
 }
@@ -136,8 +139,8 @@ void data_timeout_callback(uev_t* w, void* arg, int events) {
     }
 
     mftp_client_ctx_t* client_ctx = (mftp_client_ctx_t*)arg;
-    if (client_ctx->cmd_cleanup_in_progress) return;
-    client_ctx->cmd_cleanup_in_progress = true;
+    if (client_ctx->locked) return;
+    client_ctx->locked = true;
 
     uev_io_stop(client_ctx->t_watcher);
     uev_timer_stop(client_ctx->t_timeout_watcher);
@@ -149,6 +152,8 @@ void data_timeout_callback(uev_t* w, void* arg, int events) {
     };
 
     mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+
+    client_ctx->locked = false;
 
     client_ctx_cleanup_transfer(client_ctx);
 }
@@ -393,7 +398,9 @@ void mftp_handle_list(command_handler_arg_t* arg) {
 
     closedir(cwd); // not closing this here will leak internal resources
 
+    client_ctx->t_watcher = malloc(sizeof(uev_t));
     uev_io_init(client_ctx->server_ctx->loop, client_ctx->t_watcher, data_accept_callback, client_ctx, data_ch_socket.fd, UEV_READ);
+    client_ctx->t_timeout_watcher = malloc(sizeof(uev_t));
     uev_timer_init(client_ctx->server_ctx->loop, client_ctx->t_timeout_watcher, data_timeout_callback, client_ctx, (int)client_ctx->server_ctx->cfg.timeout_ms, 0);
 
 cleanup:
@@ -426,7 +433,7 @@ void mftp_handle_retr(command_handler_arg_t* arg) {
 
     char file_path_full[PATH_MAX] = { 0 };
 
-    sprintf(file_path_full, "%s%s/", client_ctx->server_ctx->cfg.root_dir, client_ctx->cwd);
+    sprintf(file_path_full, "%.*s%.*s/", (int)strlen(client_ctx->server_ctx->cfg.root_dir), client_ctx->server_ctx->cfg.root_dir, (int)strlen(client_ctx->cwd), client_ctx->cwd);
     strcat(file_path_full, cmd.data);
     path_normalize(file_path_full);
 
@@ -460,7 +467,9 @@ void mftp_handle_retr(command_handler_arg_t* arg) {
 
     fclose(file);
 
+    client_ctx->t_watcher = malloc(sizeof(uev_t));
     uev_io_init(client_ctx->server_ctx->loop, client_ctx->t_watcher, data_accept_callback, client_ctx, data_ch_socket.fd, UEV_READ);
+    client_ctx->t_timeout_watcher = malloc(sizeof(uev_t));
     uev_timer_init(client_ctx->server_ctx->loop, client_ctx->t_timeout_watcher, data_timeout_callback, client_ctx, (int)client_ctx->server_ctx->cfg.timeout_ms, 0);
 
 cleanup:
@@ -493,7 +502,7 @@ void mftp_handle_stor(command_handler_arg_t* arg) {
 
     char file_path_full[PATH_MAX] = { 0 };
 
-    sprintf(file_path_full, "%s%s/", client_ctx->server_ctx->cfg.root_dir, client_ctx->cwd);
+    sprintf(file_path_full, "%.*s%.*s/", (int)strlen(client_ctx->server_ctx->cfg.root_dir), client_ctx->server_ctx->cfg.root_dir, (int)strlen(client_ctx->cwd), client_ctx->cwd);
     strcat(file_path_full, cmd.data);
     path_normalize(file_path_full);
 
@@ -527,7 +536,9 @@ void mftp_handle_stor(command_handler_arg_t* arg) {
 
     fclose(file);
 
+    client_ctx->t_watcher = malloc(sizeof(uev_t));
     uev_io_init(client_ctx->server_ctx->loop, client_ctx->t_watcher, data_accept_callback, client_ctx, data_ch_socket.fd, UEV_READ);
+    client_ctx->t_timeout_watcher = malloc(sizeof(uev_t));
     uev_timer_init(client_ctx->server_ctx->loop, client_ctx->t_timeout_watcher, data_timeout_callback, client_ctx, (int)client_ctx->server_ctx->cfg.timeout_ms, 0);
 
 cleanup:
@@ -650,7 +661,7 @@ void mftp_handle_dele(command_handler_arg_t* arg) {
     }
 
     char file_path_full[PATH_MAX] = { 0 };
-    sprintf(file_path_full, "%s%s/", client_ctx->server_ctx->cfg.root_dir, client_ctx->cwd);
+    sprintf(file_path_full, "%.*s%.*s/", (int)strlen(client_ctx->server_ctx->cfg.root_dir), client_ctx->server_ctx->cfg.root_dir, (int)strlen(client_ctx->cwd), client_ctx->cwd);
     strcat(file_path_full, cmd.data);
 
     if (remove(file_path_full) == -1) {
@@ -699,7 +710,7 @@ void mftp_handle_size(command_handler_arg_t* arg) {
     }
 
     char file_path_full[PATH_MAX] = { 0 };
-    sprintf(file_path_full, "%s%s/", client_ctx->server_ctx->cfg.root_dir, client_ctx->cwd);
+    sprintf(file_path_full, "%.*s%.*s/", (int)strlen(client_ctx->server_ctx->cfg.root_dir), client_ctx->server_ctx->cfg.root_dir, (int)strlen(client_ctx->cwd), client_ctx->cwd);
     strcat(file_path_full, cmd.data);
     path_normalize(file_path_full);
 

@@ -11,6 +11,8 @@
 #define log_err(fmt, ...) fprintf(stderr, "[LOG][ERROR] " fmt "\n", ##__VA_ARGS__);
 #define log_syserr(fmt, ...) fprintf(stderr, "[LOG][SYSTEM ERROR] " fmt ": %s (%d)\n", ##__VA_ARGS__, strerror(errno), errno);
 
+#define in_range(x, a, b) ((x) >= (a) && (x) <= (b))
+
 typedef void* (*pthread_fn)(void*);
 
 void strip(char** str);
