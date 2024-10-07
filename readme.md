@@ -18,7 +18,7 @@ The rest is just plain C-99 with some POSIX functions.
 **WARNING**: This library user posix functions and libuev - both are incompatible with Windows.
 This code WON'T work on Windows.
 
-For now, only server is "implemented" (it's not really). I use telnet to act as a test client.
+For now, only server is implemented. I use telnet as a simple test client.
 
 I've used pre-compiled version of `libuev` just because I can't be bothered with integrating their automake project
 with my cmake project, and I refuse to learn plain makefiles.
@@ -45,15 +45,17 @@ cmake --build build
 To build the project.
 
 This should generate `mftp-server` binary in `build` directory.
+There should also be `mftp-client-cli` binary there - you can use it to dump some file to TCP connection - I use it to test STOR command.
 
 ## TODOs
 
-At this point, only the "skeleton" of the server is implemented. There are many things to do:
+At this point, only basic features of server are implemented. There are many things to do:
 
 - [x] Implement basic server commands
-- [ ] Memory management is a mess (server leaks on sigint/sigterm) - whole server::ctx needs a rewrite.
+- [x] Memory management is a mess (server leaks on sigint/sigterm) - whole server::ctx needs a rewrite.
 - [ ] Implement loading server configuration from file
 - [ ] Some kind of client with GUI
+- [ ] Windows support (maybe)
 
 ## LICENSE
 
