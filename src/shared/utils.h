@@ -29,11 +29,8 @@ void log_stdout(int level, const char* fmt, ...);
 #define log_trace(fmt, ...) log_stdout(LOG_TRACE, fmt, ##__VA_ARGS__)
 #define log_info(fmt, ...) log_stdout(LOG_INFO, fmt, ##__VA_ARGS__)
 #define log_err(fmt, ...) log_stdout(LOG_ERROR, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...) log_stdout(LOG_WARNING, fmt, ##__VA_ARGS__)
 #define log_syserr(fmt, ...) log_stdout(LOG_ERROR, fmt ": %s (%d)", ##__VA_ARGS__, strerror(errno), errno)
-
-// #define log_info(fmt, ...) fprintf(stdout, "[LOG][INFO]  " fmt "\n", ##__VA_ARGS__);
-// #define log_err(fmt, ...) fprintf(stderr, "[LOG][ERROR] " fmt "\n", ##__VA_ARGS__);
-// #define log_syserr(fmt, ...) fprintf(stderr, "[LOG][SYSTEM ERROR] " fmt ": %s (%d)\n", ##__VA_ARGS__, strerror(errno), errno);
 
 #define in_range(x, a, b) ((x) >= (a) && (x) <= (b))
 

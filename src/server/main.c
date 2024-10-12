@@ -19,7 +19,7 @@
 
 void term_callback(uev_t *w, void *arg, int events) {
     puts("");
-    log_info("%s (signo %d). Shutting down...", strsignal(w->siginfo.ssi_signo), w->siginfo.ssi_signo);
+    log_warn("%s (signo %d). Shutting down...", strsignal(w->siginfo.ssi_signo), w->siginfo.ssi_signo);
 
     mftp_server_ctx_t *server_ctx = (mftp_server_ctx_t *)arg;
     mftp_server_cleanup_full(server_ctx);
@@ -105,7 +105,7 @@ process:
             .data = "Invalid command",
         };
 
-        log_info("[CLIENT %d] Invalid command: %s", client_ctx->cmd_fd, client_ctx->cmd_buf);
+        log_trace("[CLIENT %d] Invalid command: %s", client_ctx->cmd_fd, client_ctx->cmd_buf);
 
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
         goto reset_buffer;
@@ -124,7 +124,7 @@ process:
         goto reset_buffer;
     }
 
-    log_info("[CLIENT %d] %s %s", client_ctx->cmd_fd, mftp_ctoa(cmd.cmd), cmd.cmd == MFTP_CMD_PASS ? "********" : cmd.data);
+    log_trace("[CLIENT %d] %s %s", client_ctx->cmd_fd, mftp_ctoa(cmd.cmd), cmd.cmd == MFTP_CMD_PASS ? "********" : cmd.data);
 
     /* Find and execute command handler */
 
@@ -178,7 +178,7 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
 
     mftp_server_ctx_t *server_ctx = (mftp_server_ctx_t *)arg;
     if (server_ctx->client_data_watchers.size >= server_ctx->cfg.max_clients) {
-        log_info("Max clients reached - rejecting connection");
+        log_warn("Max clients reached - rejecting connection");
         return;
     }
 
@@ -247,21 +247,20 @@ int main(int argc, char* argv[]) {
         .flags = { .allow_anonymous = allow_anonymous },
     };
 
-    // print out the config:
-    log_info("Server config:");
-    log_info("  Port: %d", port);
-    log_info("  Root directory: %s", root_dir);
-    log_info("  Max clients: %d", max_clients);
-    log_info("  Max command size: %d", max_cmd_size);
-    log_info("  Timeout: %d ms", timeout_ms);
-    log_info("  Allow anonymous: %s", allow_anonymous ? "yes" : "no");
+    log_trace("Server config:");
+    log_trace("  Port: %d", port);
+    log_trace("  Root directory: %s", root_dir);
+    log_trace("  Max clients: %d", max_clients);
+    log_trace("  Max command size: %d", max_cmd_size);
+    log_trace("  Timeout: %d ms", timeout_ms);
+    log_trace("  Allow anonymous: %s", allow_anonymous ? "yes" : "no");
 
     passwd_t s_creds = { .entries = list_new(passwd_entry_t) };
     if (!passwd_parse(&s_creds, "mftp.passwd")) {
         log_err("Failed to parse passwd file, enabling anonymous login");
         s_cfg.flags.allow_anonymous = 1;
     }
-    log_info("Loaded %zu users from passwd file", s_creds.entries.size);
+    log_trace("Loaded %zu users from passwd file", s_creds.entries.size);
 
     socket_t server_socket = { 0 };
     if (!socket_bind_tcp(&server_socket, INADDR_ANY, s_cfg.port)) {
@@ -290,7 +289,7 @@ int main(int argc, char* argv[]) {
     uev_signal_init(&loop, &sigint_watcher, term_callback, &server_ctx, SIGINT);
     uev_signal_init(&loop, &sigterm_watcher, term_callback, &server_ctx, SIGTERM);
 
-    log_info("Server started");
+    log_info("Server started on port %d", s_cfg.port);
 
     uev_run(&loop, 0);
 

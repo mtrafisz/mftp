@@ -317,7 +317,8 @@ void mftp_handle_pass(command_handler_arg_t* arg) {
             .data = "Invalid credentials",
         };
 
-        // prevent timing attacks:
+        // prevent timing attacks
+        // Does this even make sense? Ping over the network shouldn't be consistent enough to measure time differences...
         gettimeofday(&end_tv, NULL);
         if (end_tv.tv_sec - start_tv.tv_sec < 1) {
             usleep(1000000 - (end_tv.tv_usec - start_tv.tv_usec));
@@ -399,7 +400,7 @@ void mftp_handle_list(command_handler_arg_t* arg) {
     client_ctx->t_fd_in = dup(dirfd(cwd)); // I love posix streams :3
     client_ctx->t_kind = MFTP_CMD_LIST;
 
-    closedir(cwd); // not closing this here will leak internal resources
+    closedir(cwd); // not closing this here will leak internal os resources
 
     client_ctx->t_watcher = malloc(sizeof(uev_t));
     uev_io_init(client_ctx->server_ctx->loop, client_ctx->t_watcher, data_accept_callback, client_ctx, data_ch_socket.fd, UEV_READ);
@@ -740,6 +741,8 @@ void mftp_handle_size(command_handler_arg_t* arg) {
 cleanup:
     free(arg);
 }
+
+// "extern"ed in handlers.h:
 
 const command_handler_t command_table[] = {
     { MFTP_CMD_NOOP, mftp_handle_noop },
