@@ -178,7 +178,6 @@ void mftp_handle_quit(command_handler_arg_t* arg) {
     mftp_server_msg_write(arg->client_ctx->cmd_fd, &msg);
 
     mftp_server_remove_client_data_watcher(arg->client_ctx->server_ctx, arg->client_ctx->cmd_watcher);
-    client_ctx_cleanup_full(arg->client_ctx);
 
     free(arg);
 }
@@ -229,7 +228,7 @@ void mftp_handle_user(command_handler_arg_t* arg) {
     // logout
     client_ctx->authenticated = false;
     memset(client_ctx->creds.username, 0, sizeof(client_ctx->creds.username));
-    memset(client_ctx->creds.passwd, 0, sizeof(client_ctx->creds.passwd));
+    memset(client_ctx->creds.password, 0, sizeof(client_ctx->creds.password));
 
     // copy new username
     strncpy(client_ctx->creds.username, cmd.data, strlen(cmd.data));
@@ -252,15 +251,16 @@ void mftp_handle_pass(command_handler_arg_t* arg) {
 
     size_t arg_len = strlen(cmd.data);
 
-    if (arg_len == 0) {
-        mftp_server_msg_t msg = {
-            .kind = MFTP_MSG_ERR,
-            .code = MFTP_CODE_EXPECTED_ARGUMENT,
-            .data = "Username not provided",
-        };
-        mftp_server_msg_write(client_ctx->cmd_fd, &msg);
-        goto cleanup;
-    } else if (arg_len > sizeof(client_ctx->creds.passwd) - 1) {
+    // if (arg_len == 0) {
+    //     mftp_server_msg_t msg = {
+    //         .kind = MFTP_MSG_ERR,
+    //         .code = MFTP_CODE_EXPECTED_ARGUMENT,
+    //         .data = "Password not provided",
+    //     };
+    //     mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+    //     goto cleanup;
+    // } else 
+    if (arg_len > sizeof(client_ctx->creds.password) - 1) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_INVALID_ARGUMENT,
@@ -278,34 +278,37 @@ void mftp_handle_pass(command_handler_arg_t* arg) {
         goto cleanup;
     }
 
-    memcpy(client_ctx->creds.passwd, cmd.data, arg_len);
+    memcpy(client_ctx->creds.password, cmd.data, arg_len);
 
     bool creds_ok = false;
 
     struct timeval start_tv, end_tv;
     gettimeofday(&start_tv, NULL);
 
-    for (int i = 0; i < server_ctx->user_creds_count; ++i) {
-        if (strcmp(server_ctx->user_creds[i].username, client_ctx->creds.username) == 0 &&
-            strcmp(server_ctx->user_creds[i].passwd, client_ctx->creds.passwd) == 0) {
-            creds_ok = true;
-
-            memset(client_ctx->creds.perms, 0, sizeof(client_ctx->creds.perms));
-            strncpy(client_ctx->creds.perms, server_ctx->user_creds[i].perms, strlen(server_ctx->user_creds[i].perms));
-            
-            break;
-        }
+    client_ctx->creds.perms = passwd_check(&server_ctx->creds, client_ctx->creds.username, client_ctx->creds.password);
+    if (client_ctx->creds.perms != 0) {
+        creds_ok = true;
     }
 
     mftp_server_msg_t msg;
 
-    if (creds_ok || server_ctx->cfg.flags.allow_anonymous && strcmp(client_ctx->creds.username, "anon") == 0) {
+    if (creds_ok) {
         client_ctx->authenticated = true;
 
         msg = (mftp_server_msg_t) {
             .kind = MFTP_MSG_OK,
             .code = MFTP_CODE_LOGGED_IN,
-            .data = "Logged in",
+            .data = "Logged in as ",
+        };
+        strcat(msg.data, client_ctx->creds.username);
+    } else if (server_ctx->cfg.flags.allow_anonymous && strcmp(client_ctx->creds.username, "anon") == 0) {
+        client_ctx->authenticated = true;
+        client_ctx->creds.perms = PERM_LIST | PERM_READ;
+
+        msg = (mftp_server_msg_t) {
+            .kind = MFTP_MSG_OK,
+            .code = MFTP_CODE_LOGGED_IN,
+            .data = "Logged in anonymously",
         };
     } else {
         msg = (mftp_server_msg_t) {
@@ -343,7 +346,7 @@ void mftp_handle_wami(command_handler_arg_t* arg) {
             .code = MFTP_CODE_GENERAL_SUCCESS,
             .data = { 0 },
         };
-        sprintf(msg.data, "%s %s", client_ctx->creds.username, client_ctx->creds.perms);
+        sprintf(msg.data, "%s %s", client_ctx->creds.username, perm_to_str(client_ctx->creds.perms));
     }
 
     mftp_server_msg_write(client_ctx->cmd_fd, &msg);
@@ -355,7 +358,7 @@ cleanup:
 void mftp_handle_list(command_handler_arg_t* arg) {
     mftp_client_ctx_t* client_ctx = arg->client_ctx;
 
-    if (strchr(client_ctx->creds.perms, 'l') == NULL) {
+    if (~client_ctx->creds.perms & PERM_LIST) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
@@ -411,7 +414,7 @@ void mftp_handle_retr(command_handler_arg_t* arg) {
     mftp_client_ctx_t* client_ctx = arg->client_ctx;
     mftp_client_msg_t cmd = arg->cmd;
 
-    if (strchr(client_ctx->creds.perms, 'r') == NULL) {
+    if (~client_ctx->creds.perms & PERM_READ) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
@@ -480,7 +483,7 @@ void mftp_handle_stor(command_handler_arg_t* arg) {
     mftp_client_ctx_t* client_ctx = arg->client_ctx;
     mftp_client_msg_t cmd = arg->cmd;
 
-    if (strchr(client_ctx->creds.perms, 'w') == NULL) {
+    if (~client_ctx->creds.perms & PERM_WRITE) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
@@ -640,7 +643,7 @@ void mftp_handle_dele(command_handler_arg_t* arg) {
     mftp_client_msg_t cmd = arg->cmd;
     mftp_client_ctx_t* client_ctx = arg->client_ctx;
 
-    if (strchr(client_ctx->creds.perms, 'd') == NULL) {
+    if (~client_ctx->creds.perms & PERM_WRITE) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
@@ -689,7 +692,7 @@ void mftp_handle_size(command_handler_arg_t* arg) {
     mftp_client_msg_t cmd = arg->cmd;
     mftp_client_ctx_t* client_ctx = arg->client_ctx;
 
-    if (strchr(client_ctx->creds.perms, 'r') == NULL) {
+    if (~client_ctx->creds.perms & PERM_READ) {
         mftp_server_msg_t msg = {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,

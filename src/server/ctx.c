@@ -56,7 +56,7 @@ bool client_ctx_init(mftp_client_ctx_t* ctx, int cmd_fd, mftp_server_ctx_t* serv
     /* AUTHENTICATION */
 
     ctx->authenticated = true;
-    ctx->creds = (mftp_creds_t) { .username = "anon", .passwd = "", .perms = "rwdl" };
+    ctx->creds = (passwd_entry_t) { .username = "anon", .password = "", .perms = PERM_LIST | PERM_READ | PERM_WRITE | PERM_DELETE };
 
     if (!server_ctx->cfg.flags.allow_anonymous) ctx->authenticated = false;
 
@@ -102,7 +102,7 @@ void client_ctx_cleanup_transfer(mftp_client_ctx_t* ctx) {
 }
 
 void client_ctx_cleanup_full(mftp_client_ctx_t* ctx) {
-    if (ctx->locked) return;
+    if (!ctx || ctx->locked) return;
     ctx->locked = true;
 
     client_ctx_cleanup_transfer(ctx);

@@ -53,9 +53,15 @@ At this point, only basic features of server are implemented. There are many thi
 
 - [x] Implement basic server commands
 - [x] Memory management is a mess (server leaks on sigint/sigterm) - whole server::ctx needs a rewrite.
-- [ ] Implement loading server configuration from file
+- [x] Implement loading server configuration from file
 - [ ] Some kind of client with GUI
 - [ ] Windows support (maybe)
+
+### Technical TODOs
+
+- [ ] I use linked list for all dynamic arrays - it's not the best solution
+- [ ] Permissions are sent to client (WAMI) using numbers - they should be sent in clear text, .passwd style
+- [ ] Libuev is not portable - I want this app to also work on OS for games...
 
 ## LICENSE
 

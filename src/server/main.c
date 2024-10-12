@@ -11,6 +11,9 @@
 #include "shared/utils.h"
 #include "shared/socket.h"
 #include "shared/cmd.h"
+#include "shared/ini.h"
+#include "shared/passwd.h"
+#include "shared/list.h"
 #include "server/ctx.h"
 #include "server/handlers.h"
 
@@ -58,7 +61,6 @@ void client_data_callback(uev_t *w, void *arg, int events) {
             if (*c != '\r' || *j != '\n') {
                 continue;
             }
-            // if (*c == '\r' && *j == '\n') {
             *c = '\0';
 
             size_t msg_len = c - buffer;
@@ -103,7 +105,7 @@ process:
             .data = "Invalid command",
         };
 
-        log_info("Invalid command from client %d: %s", client_ctx->cmd_fd, client_ctx->cmd_buf);
+        log_info("[CLIENT %d] Invalid command: %s", client_ctx->cmd_fd, client_ctx->cmd_buf);
 
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
         goto reset_buffer;
@@ -133,7 +135,6 @@ process:
 
         cmd_implemented = true;
 
-        // clion cries about leak, but it's freed in the handler.
         command_handler_arg_t* handler_arg = malloc(sizeof(command_handler_arg_t));
         if (handler_arg == NULL) {
             log_syserr("Failed to allocate memory for command handler argument");
@@ -159,8 +160,6 @@ process:
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
     }
 
-    // micro "cleanup" after command:
-    // memset(client_ctx->cmd_buf, 0, client_ctx->cmd_buf_len);
 reset_buffer:
     client_ctx->cmd_buf_len = 0;
     return;
@@ -178,7 +177,6 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
     }
 
     mftp_server_ctx_t *server_ctx = (mftp_server_ctx_t *)arg;
-    // if (server_ctx->client_data_watchers_count >= server_ctx->cfg.max_clients) {
     if (server_ctx->client_data_watchers.size >= server_ctx->cfg.max_clients) {
         log_info("Max clients reached - rejecting connection");
         return;
@@ -207,8 +205,9 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
     uev_t* client_data_watcher = malloc(sizeof(uev_t));
 
     uev_io_init(w->ctx, client_data_watcher, client_data_callback, client_ctx, client_cmd_fd, UEV_READ);
-    // mftp_server_add_client_data_watcher(server_ctx, client_ctx->cmd_watcher);
     list_insert(&server_ctx->client_data_watchers, client_data_watcher, LIST_BACK);
+
+    client_ctx->cmd_watcher = client_data_watcher;
 
     mftp_server_msg_t msg = {
         .kind = MFTP_MSG_OK,
@@ -227,23 +226,42 @@ int main(int argc, char* argv[]) {
     struct uev_ctx loop;
     uev_init(&loop);
 
-    // TEMPORARY!!!
-    // TODO: read from config file
+    ini_t* ini_section_list;
+    ini_t ini_f = { list_new(ini_section_t) };
+    if (!ini_parse(&ini_f, argc > 1 ? argv[1] : "mftp.ini")) ini_section_list = NULL;
+    else ini_section_list = &ini_f;
+
+    int port = ini_get(ini_section_list, "server", "port", 5555);
+    const char* root_dir = ini_get(ini_section_list, "server", "root_dir", "./");
+    int max_clients = ini_get(ini_section_list, "server", "max_clients", 10);
+    int max_cmd_size = ini_get(ini_section_list, "server", "max_command_size", 256);
+    int timeout_ms = ini_get(ini_section_list, "server", "timeout", 5000);
+    int allow_anonymous = ini_get(ini_section_list, "server.flags", "allow_anonymous", 1);
+
     mftp_server_cfg_t s_cfg = {
-        .port = argc > 1 ? atoi(argv[1]) : 2121,
-        .root_dir = "./",
-        .max_clients = 10,
-        .max_cmd_size = 256,
-        .timeout_ms = 5000,
-        .flags = { .allow_anonymous = true },
+        .port = port,
+        .root_dir = root_dir,
+        .max_clients = max_clients,
+        .max_cmd_size = max_cmd_size,
+        .timeout_ms = timeout_ms,
+        .flags = { .allow_anonymous = allow_anonymous },
     };
-    // TODO: read from some kind of "users" file (maybe use the unix passwd file?)
-    mftp_creds_t s_creds[] = {
-        { .username = "admin", .passwd = "admin123", .perms = "rwdl" },
-        { .username = "user", .passwd = "password", .perms = "rl" },
-    };
-    const size_t s_creds_count = sizeof(s_creds) / sizeof(s_creds[0]);
-    // END TEMPORARY!!!
+
+    // print out the config:
+    log_info("Server config:");
+    log_info("  Port: %d", port);
+    log_info("  Root directory: %s", root_dir);
+    log_info("  Max clients: %d", max_clients);
+    log_info("  Max command size: %d", max_cmd_size);
+    log_info("  Timeout: %d ms", timeout_ms);
+    log_info("  Allow anonymous: %s", allow_anonymous ? "yes" : "no");
+
+    passwd_t s_creds = { .entries = list_new(passwd_entry_t) };
+    if (!passwd_parse(&s_creds, "mftp.passwd")) {
+        log_err("Failed to parse passwd file, enabling anonymous login");
+        s_cfg.flags.allow_anonymous = 1;
+    }
+    log_info("Loaded %zu users from passwd file", s_creds.entries.size);
 
     socket_t server_socket = { 0 };
     if (!socket_bind_tcp(&server_socket, INADDR_ANY, s_cfg.port)) {
@@ -261,11 +279,8 @@ int main(int argc, char* argv[]) {
         .loop = &loop,
         .cfg = s_cfg,
         .fd = server_socket.fd,
-        .user_creds = s_creds,
-        .user_creds_count = s_creds_count,
+        .creds = s_creds,
         .client_data_watchers = list_new(uev_t),
-        // .client_data_watchers = malloc(s_cfg.max_clients * sizeof(uev_t)),
-        // .client_data_watchers_count = 0,
     };
 
     uev_t server_watcher;
@@ -275,13 +290,18 @@ int main(int argc, char* argv[]) {
     uev_signal_init(&loop, &sigint_watcher, term_callback, &server_ctx, SIGINT);
     uev_signal_init(&loop, &sigterm_watcher, term_callback, &server_ctx, SIGTERM);
 
-    log_info("Server started on port %d", s_cfg.port);
+    log_info("Server started");
 
     uev_run(&loop, 0);
 
     uev_signal_stop(&sigint_watcher);
     uev_signal_stop(&sigterm_watcher);
+    uev_io_stop(&server_watcher);
+
+    passwd_cleanup(&s_creds);
 cleanup:
     uev_exit(&loop);
+    ini_cleanup(ini_section_list);
+    log_info("Server stopped");
     return 0;
 }

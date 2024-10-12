@@ -12,6 +12,69 @@ const allocator_t std_allocator = {
     .realloc = realloc
 };
 
+#include <stdio.h>
+#include <stdarg.h>
+
+log_cfg_t log_cfg = {
+    .flags = {
+        .color = true,
+        .datetime = false,
+    },
+    .level = LOG_TRACE,
+};
+
+const int log_colors[] = {
+    32, // green
+    34, // blue
+    33, // yellow
+    31, // red
+};
+
+// "[{color}{bold}{level}{reset}] {message}\n"
+const char* log_fmt = "\033[%d;1m[%s]\033[0m %s\n";
+
+void log_stdout(int level, const char* fmt, ...) {
+    if (level < log_cfg.level) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+
+    char level_str[16] = { 0 };
+    switch (level) {
+        case LOG_TRACE:
+            strcpy(level_str, "TRACE");
+            break;
+        case LOG_ERROR:
+            strcpy(level_str, "ERROR");
+            break;
+        case LOG_WARNING:
+            strcpy(level_str, "WARNING");
+            break;
+        case LOG_INFO:
+            strcpy(level_str, "INFO");
+            break;
+        default:
+            strcpy(level_str, "UNKNOWN");
+            break;
+    }
+
+    // Buffer to hold the formatted message
+    char message[4096] = { 0 };
+    vsnprintf(message, sizeof(message), fmt, args);
+
+    if (log_cfg.flags.color) {
+        // Apply color formatting
+        fprintf(stderr, "\033[%d;1m[%s]\033[0m %s\n", log_colors[level], level_str, message);
+    } else {
+        // Non-colored output
+        fprintf(stderr, "[%s] %s\n", level_str, message);
+    }
+
+    va_end(args);
+}
+
 void strip(char** str) {
     assert(str && *str);
 
@@ -30,6 +93,16 @@ void strip(char** str) {
     }
 
     *(c+1) = '\0';
+}
+
+char* trim(char* str) {
+    char* end;
+    while(isspace((unsigned char)*str)) str++;
+    if(*str == 0) return str;
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+    end[1] = '\0';
+    return str;
 }
 
 void to_upper(char* str) {

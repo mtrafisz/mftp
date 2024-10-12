@@ -1,0 +1,7 @@
+; format: "<username>:<password>:<r - read, w - write, d - delete, l - list>
+; for comments - first character of the line has to be ';' or '#'
+; /etc/passwd is not used, due to our simplyfied permissions system
+
+anon::l
+admin:admin123:rwld
+user:password:rl

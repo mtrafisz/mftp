@@ -8,19 +8,14 @@
 #include <uev.h>
 
 #include "shared/list.h"
-
-typedef struct {
-    char username[32];
-    char passwd[32];
-    char perms[32]; // 'r' - read, 'w' - write, 'd' - delete, 'l' - list,
-} mftp_creds_t;
+#include "shared/passwd.h"
 
 typedef struct {
     struct {
         uint32_t allow_anonymous: 1;
     } flags;
     uint16_t port;
-    char *root_dir;
+    const char *root_dir;
     uint16_t max_clients;
     size_t max_cmd_size;
     uint32_t timeout_ms;
@@ -30,8 +25,7 @@ typedef struct {
     uev_ctx_t* loop;
     mftp_server_cfg_t cfg;
     int fd;
-    mftp_creds_t* user_creds;
-    size_t user_creds_count;
+    passwd_t creds;
     list_t client_data_watchers;
 } mftp_server_ctx_t;
 
@@ -51,7 +45,7 @@ typedef struct {
 
     // authentication:
     bool authenticated;
-    mftp_creds_t creds;
+    passwd_entry_t creds;
 
     // transfer channel context:
     int t_kind;  // transfer kind - MFTP_CMD_RETR, MFTP_CMD_STOR or MFTP_CMD_LIST
