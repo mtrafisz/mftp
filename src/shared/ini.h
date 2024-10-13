@@ -43,10 +43,17 @@ int ini_get_int(ini_t* ini, const char* section, const char* name, int def);
     default: ini_get_blob \
 )(ini, section, name, def)
 
-// bool ini_parse(list_t* ini_section_list, const char* filename);
-// void ini_cleanup(list_t* ini_section_list);
+bool ini_set_blob(ini_t* ini, const char* section, const char* name, const char* value);
+bool ini_set_int(ini_t* ini, const char* section, const char* name, int value);
 
-// const char* ini_get_string(list_t* ini_section_list, const char* section, const char* name, const char* def);
-// int ini_get_int(list_t* ini_section_list, const char* section, const char* name, int def);
+#define ini_set(ini, section, name, value) _Generic((value), \
+    char*: ini_set_blob, \
+    const char*: ini_set_blob, \
+    int: ini_set_int, \
+    unsigned int: ini_set_int, \
+    default: ini_set_blob \
+)(ini, section, name, value)
+
+bool ini_save(ini_t* ini, const char* filename);
 
 #endif

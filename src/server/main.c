@@ -222,45 +222,86 @@ void server_accept_callback(uev_t *w, void *arg, int events) {
     mftp_server_msg_write(client_cmd_fd, &msg);
 }
 
-int main(int argc, char* argv[]) {
-    struct uev_ctx loop;
-    uev_init(&loop);
+const ini_t get_default_config_ini() {
+    ini_t config = { list_new(ini_section_t) };
+    
+    ini_set(&config, "server", "port", 5555);
+    ini_set(&config, "server", "root_dir", "/srv/mftp");
+    ini_set(&config, "server", "max_clients", 10);
+    ini_set(&config, "server", "max_command_size", 256);
+    ini_set(&config, "server", "timeout", 5000);
+    ini_set(&config, "server.flags", "allow_anonymous", 1);
 
-    ini_t* ini_section_list;
-    ini_t ini_f = { list_new(ini_section_t) };
-    if (!ini_parse(&ini_f, argc > 1 ? argv[1] : "mftp.ini")) ini_section_list = NULL;
-    else ini_section_list = &ini_f;
+    return config;
+}
 
-    int port = ini_get(ini_section_list, "server", "port", 5555);
-    const char* root_dir = ini_get(ini_section_list, "server", "root_dir", "./");
-    int max_clients = ini_get(ini_section_list, "server", "max_clients", 10);
-    int max_cmd_size = ini_get(ini_section_list, "server", "max_command_size", 256);
-    int timeout_ms = ini_get(ini_section_list, "server", "timeout", 5000);
-    int allow_anonymous = ini_get(ini_section_list, "server.flags", "allow_anonymous", 1);
-
-    mftp_server_cfg_t s_cfg = {
-        .port = port,
-        .root_dir = root_dir,
-        .max_clients = max_clients,
-        .max_cmd_size = max_cmd_size,
-        .timeout_ms = timeout_ms,
-        .flags = { .allow_anonymous = allow_anonymous },
+mftp_server_cfg_t parse_ini_to_cfg(ini_t* ini) {
+    mftp_server_cfg_t cfg = {
+        .port = ini_get_int(ini, "server", "port", 5555),
+        .root_dir = ini_get(ini, "server", "root_dir", "/srv/mftp"),
+        .max_clients = ini_get_int(ini, "server", "max_clients", 10),
+        .max_cmd_size = ini_get_int(ini, "server", "max_command_size", 256),
+        .timeout_ms = ini_get_int(ini, "server", "timeout", 5000),
+        .flags = {
+            .allow_anonymous = ini_get_int(ini, "server.flags", "allow_anonymous", 1),
+        },
     };
 
+    return cfg;
+}
+
+int main(int argc, char* argv[]) {
+    log_cfg.level = LOG_TRACE;
+
+    const char* config_path = get_config_path();
+
+    // load config
+
+    log_trace("Loading config from %s", config_path);
+    
+    ini_t config_ini = { list_new(ini_section_t) };
+    if (!ini_parse(&config_ini, config_path)) {
+        ini_cleanup(&config_ini);
+        config_ini = get_default_config_ini();
+
+        if (errno == ENOENT) {
+            log_warn("Config file not found, saving default config to %s", config_path);
+            ini_save(&config_ini, config_path); // can fail, but I don't care for now...
+        } else {
+            log_err("Failed to parse config file, falling back to defaults");
+        }
+    }
+
+    log_trace("Config parsed, converting to server config");
+
+    mftp_server_cfg_t s_cfg = parse_ini_to_cfg(&config_ini);
+
+    log_trace("Config loaded");
+
     log_trace("Server config:");
-    log_trace("  Port: %d", port);
-    log_trace("  Root directory: %s", root_dir);
-    log_trace("  Max clients: %d", max_clients);
-    log_trace("  Max command size: %d", max_cmd_size);
-    log_trace("  Timeout: %d ms", timeout_ms);
-    log_trace("  Allow anonymous: %s", allow_anonymous ? "yes" : "no");
+    log_trace("  Port: %d", s_cfg.port);
+    log_trace("  Root directory: %s", s_cfg.root_dir);
+    log_trace("  Max clients: %d", s_cfg.max_clients);
+    log_trace("  Max command size: %d", s_cfg.max_cmd_size);
+    log_trace("  Timeout: %d ms", s_cfg.timeout_ms);
+    log_trace("  Allow anonymous: %s", s_cfg.flags.allow_anonymous ? "yes" : "no");
+
+    // load user accounts
+
+    const char* db_path = get_db_path();
+
+    log_trace("Loading user accounts from %s", db_path);
 
     passwd_t s_creds = { .entries = list_new(passwd_entry_t) };
-    if (!passwd_parse(&s_creds, "mftp.passwd")) {
+    if (!passwd_parse(&s_creds, db_path)) {
         log_err("Failed to parse passwd file, enabling anonymous login");
         s_cfg.flags.allow_anonymous = 1;
     }
+
     log_trace("Loaded %zu users from passwd file", s_creds.entries.size);
+
+    struct uev_ctx loop;
+    uev_init(&loop);
 
     socket_t server_socket = { 0 };
     if (!socket_bind_tcp(&server_socket, INADDR_ANY, s_cfg.port)) {
@@ -300,7 +341,7 @@ int main(int argc, char* argv[]) {
     passwd_cleanup(&s_creds);
 cleanup:
     uev_exit(&loop);
-    ini_cleanup(ini_section_list);
+    ini_cleanup(&config_ini);
     log_info("Server stopped");
     return 0;
 }

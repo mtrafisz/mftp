@@ -23,15 +23,18 @@ log_cfg_t log_cfg = {
     .level = LOG_TRACE,
 };
 
-const int log_colors[] = {
-    32, // green
-    34, // blue
-    33, // yellow
-    31, // red
+typedef struct {
+    uint8_t r, g, b;
+} color_t;
+
+const color_t log_colors[] = {
+    {46, 196, 182},
+    {253, 255, 252},
+    {255, 159, 28},
+    {231, 29, 54},
 };
 
-// "[{color}{bold}{level}{reset}] {message}\n"
-const char* log_fmt = "\033[%d;1m[%s]\033[0m %s\n";
+#define MAX_LEVEL_LEN 5
 
 void log_stdout(int level, const char* fmt, ...) {
     if (level < log_cfg.level) {
@@ -41,35 +44,28 @@ void log_stdout(int level, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
-    char level_str[16] = { 0 };
+    char level_str[16] = {0};
     switch (level) {
-        case LOG_TRACE:
-            strcpy(level_str, "TRACE");
-            break;
-        case LOG_ERROR:
-            strcpy(level_str, "ERROR");
-            break;
-        case LOG_WARNING:
-            strcpy(level_str, "WARNING");
-            break;
-        case LOG_INFO:
-            strcpy(level_str, "INFO");
-            break;
-        default:
-            strcpy(level_str, "UNKNOWN");
-            break;
+        case LOG_TRACE:   strcpy(level_str, "TRACE"); break;
+        case LOG_ERROR:   strcpy(level_str, "ERROR"); break;
+        case LOG_WARNING: strcpy(level_str, "WARN");  break;
+        case LOG_INFO:    strcpy(level_str, "INFO");  break;
+        default:          strcpy(level_str, "UNKNOWN"); break;
     }
 
-    // Buffer to hold the formatted message
-    char message[4096] = { 0 };
+    char message[4096] = {0};
     vsnprintf(message, sizeof(message), fmt, args);
 
+    int padding = MAX_LEVEL_LEN - (int)strlen(level_str);
+
     if (log_cfg.flags.color) {
-        // Apply color formatting
-        fprintf(stderr, "\033[%d;1m[%s]\033[0m %s\n", log_colors[level], level_str, message);
+        // fprintf(stderr, "\033[%d;1m[%s]\033[0m%*s%s\n", 
+        //         log_colors[level], level_str, padding + 1, "", message); // for standard ansi colors;
+        // for rgb colors:
+        fprintf(stderr, "\033[38;2;%d;%d;%dm[%s]\033[0m%*s%s\n", 
+                log_colors[level].r, log_colors[level].g, log_colors[level].b, level_str, padding + 1, "", message);
     } else {
-        // Non-colored output
-        fprintf(stderr, "[%s] %s\n", level_str, message);
+        fprintf(stderr, "[%s]%*s%s\n", level_str, padding + 1, "", message);
     }
 
     va_end(args);
@@ -204,6 +200,10 @@ void path_normalize(char path[PATH_MAX]) {
                     j--;
                 }
             }
+        } else if (*c == '\\') {
+            // Convert backslashes to forward slashes
+            *j++ = '/';
+            c++;
         } else {
             *j++ = *c++;
         }
@@ -215,4 +215,16 @@ void path_normalize(char path[PATH_MAX]) {
     *j = '\0';
 
     strcpy(path, temp);
+}
+
+const char* get_config_path() {
+    static char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/var/lib/mftp/mftp.conf");
+    return path;
+}
+
+const char* get_db_path() {
+    static char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/var/lib/mftp/mftp.passwd");
+    return path;
 }

@@ -29,4 +29,6 @@ void passwd_cleanup(passwd_t* passwd);
 
 uint8_t passwd_check(const passwd_t* passwd, const char* username, const char* password);
 
+bool passwd_save(passwd_t* passwd, const char* filename);
+
 #endif

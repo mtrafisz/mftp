@@ -45,4 +45,7 @@ bool path_join(char out_path[PATH_MAX], const char* cwd, const char* rel_path);
 // normalizes path (removes redundant slashes, resolves ".." and ".")
 void path_normalize(char path[PATH_MAX]);
 
+const char* get_config_path();
+const char* get_db_path();
+
 #endif

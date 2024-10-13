@@ -17,6 +17,7 @@
 
 void* transfer_thread(void* arg) {
     mftp_client_ctx_t* ctx = (mftp_client_ctx_t*)arg;
+    ctx->t_active = true;
 
     char buffer[512] = { 0 };
 
@@ -25,7 +26,7 @@ void* transfer_thread(void* arg) {
         DIR* cwd = fdopendir(ctx->t_fd_in);
         struct dirent* entry;
 
-        while ((entry = readdir(cwd)) != NULL) {
+        while ((entry = readdir(cwd)) != NULL && ctx->t_active) {
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
             char* entry_type;
@@ -51,7 +52,7 @@ void* transfer_thread(void* arg) {
     case MFTP_CMD_RETR: {
         FILE* file = fdopen(ctx->t_fd_in, "rb");
 
-        while (true) {
+        while (ctx->t_active) {
             size_t bytes_read = fread(buffer, 1, sizeof(buffer), file);
             if (bytes_read == 0) break;
             send(ctx->t_fd_out, buffer, bytes_read, 0);
@@ -62,7 +63,7 @@ void* transfer_thread(void* arg) {
     case MFTP_CMD_STOR: {
         FILE* file = fdopen(ctx->t_fd_out, "wb");
 
-        while (true) {
+        while (ctx->t_active) {
             ssize_t bytes_read = recv(ctx->t_fd_in, buffer, sizeof(buffer), 0);
             if (bytes_read == 0) break;
             if (bytes_read < 0) {
@@ -79,12 +80,14 @@ void* transfer_thread(void* arg) {
         break;
     }
 
+    if (!ctx->t_active) return NULL; // transfer aborted forcefully
+
     mftp_server_msg_t msg = {
         .kind = MFTP_MSG_OK,
         .code = MFTP_CODE_CLOSING_DATA_CHANNEL,
         .data = "Transfer complete",
     };
-    mftp_server_msg_write(ctx->cmd_fd, &msg);
+     mftp_server_msg_write(ctx->cmd_fd, &msg);
 
     client_ctx_cleanup_transfer(ctx);
     return NULL;
@@ -369,6 +372,16 @@ void mftp_handle_list(command_handler_arg_t* arg) {
         goto cleanup;
     }
 
+    if (client_ctx->t_active) {
+        mftp_server_msg_t msg = {
+            .kind = MFTP_MSG_ERR,
+            .code = MFTP_CODE_BUSY,
+            .data = "Transfer in progress",
+        };
+        mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+        goto cleanup;
+    }
+
     char cwd_full[512] = { 0 };
     sprintf(cwd_full, "%s%s", client_ctx->server_ctx->cfg.root_dir, client_ctx->cwd + 1); // + 1 to skip '/'
 
@@ -420,6 +433,16 @@ void mftp_handle_retr(command_handler_arg_t* arg) {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
             .data = "Permission denied",
+        };
+        mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+        goto cleanup;
+    }
+
+    if (client_ctx->t_active) {
+        mftp_server_msg_t msg = {
+            .kind = MFTP_MSG_ERR,
+            .code = MFTP_CODE_BUSY,
+            .data = "Transfer in progress",
         };
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
         goto cleanup;
@@ -489,6 +512,16 @@ void mftp_handle_stor(command_handler_arg_t* arg) {
             .kind = MFTP_MSG_ERR,
             .code = MFTP_CODE_FORBIDDEN,
             .data = "Permission denied",
+        };
+        mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+        goto cleanup;
+    }
+
+    if (client_ctx->t_active) {
+        mftp_server_msg_t msg = {
+            .kind = MFTP_MSG_ERR,
+            .code = MFTP_CODE_BUSY,
+            .data = "Transfer in progress",
         };
         mftp_server_msg_write(client_ctx->cmd_fd, &msg);
         goto cleanup;
@@ -742,6 +775,33 @@ cleanup:
     free(arg);
 }
 
+// TODO: As for now, ABOR will cause server to complain - there will be reading errors (from file or socket) - no data is leaked, but logs will be dirty with meaningless errors.
+void mftp_handle_abor(command_handler_arg_t* arg) {
+    mftp_client_ctx_t* client_ctx = arg->client_ctx;
+
+    if (!client_ctx->t_active) {
+        mftp_server_msg_t msg = {
+            .kind = MFTP_MSG_ERR,
+            .code = MFTP_CODE_GENERAL_FAILURE,
+            .data = "No transfer in progress",
+        };
+        mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+        goto cleanup;
+    }
+
+    client_ctx_cleanup_transfer(client_ctx);
+
+    mftp_server_msg_t msg = {
+        .kind = MFTP_MSG_OK,
+        .code = MFTP_CODE_TRANSFER_ABORTED,
+        .data = "Transfer aborted",
+    };
+    mftp_server_msg_write(client_ctx->cmd_fd, &msg);
+
+cleanup:
+    free(arg);
+}
+
 // "extern"ed in handlers.h:
 
 const command_handler_t command_table[] = {
@@ -758,5 +818,6 @@ const command_handler_t command_table[] = {
     { MFTP_CMD_CHWD, mftp_handle_chwd },
     { MFTP_CMD_DELE, mftp_handle_dele },
     { MFTP_CMD_SIZE, mftp_handle_size },
+    { MFTP_CMD_ABOR, mftp_handle_abor },
 };
 const size_t command_table_size = sizeof(command_table) / sizeof(command_table[0]);
