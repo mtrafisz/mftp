@@ -1,0 +1,17 @@
+# Remove installed files
+execute_process(COMMAND rm -f /usr/bin/mftp-server)
+execute_process(COMMAND rm -f /usr/local/bin/mftp-setup.bash)
+execute_process(COMMAND rm -f /etc/systemd/system/mftp.service)
+
+# Disable and stop the service
+execute_process(COMMAND systemctl disable mftp.service)
+execute_process(COMMAND systemctl stop mftp.service)
+
+# Reload the systemd daemon
+execute_process(COMMAND systemctl daemon-reload)
+
+# Remove the user and group
+execute_process(COMMAND userdel mftp)
+execute_process(COMMAND groupdel mftp)
+
+message("Uninstall complete")

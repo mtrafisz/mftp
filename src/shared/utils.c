@@ -4,6 +4,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "allocator.h"
 #include <stdlib.h>
 const allocator_t std_allocator = {
@@ -217,14 +220,44 @@ void path_normalize(char path[PATH_MAX]) {
     strcpy(path, temp);
 }
 
+// they are functions in case I want to use some env variables or smth
+
 const char* get_config_path() {
     static char path[PATH_MAX];
-    snprintf(path, sizeof(path), "/var/lib/mftp/mftp.conf");
+    snprintf(path, sizeof(path), "/srv/mftp/mftp.conf");
     return path;
 }
 
 const char* get_db_path() {
     static char path[PATH_MAX];
-    snprintf(path, sizeof(path), "/var/lib/mftp/mftp.passwd");
+    snprintf(path, sizeof(path), "/srv/mftp/mftp.passwd");
     return path;
 }
+
+// bool mkdir_p(const char* path) {
+//     char* p = NULL;
+//     char* copy = strdup(path);
+//     if (!copy) {
+//         log_syserr("Failed to allocate memory for path copy");
+//         return false;
+//     }
+
+//     for (p = strchr(copy + 1, '/'); p; p = strchr(p + 1, '/')) {
+//         *p = '\0';
+//         if (mkdir(copy, 0755) == -1 && errno != EEXIST) {
+//             log_syserr("Failed to create directory %s", copy);
+//             free(copy);
+//             return false;
+//         }
+//         *p = '/';
+//     }
+
+//     if (mkdir(copy, 0755) == -1 && errno != EEXIST) {
+//         log_syserr("Failed to create directory %s", copy);
+//         free(copy);
+//         return false;
+//     }
+
+//     free(copy);
+//     return true;
+// }

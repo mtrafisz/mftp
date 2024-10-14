@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Variables
+USER="@MFTP_USER@"
+GROUP="@MFTP_GROUP@"
+ROOT_DIR="/srv/mftp"
+FS_DIR="/srv/mftp/fs"
+
+# Create group and user
+
+if ! getent group $GROUP > /dev/null 2>&1; then
+    echo "Creating group $GROUP"
+    groupadd -r $GROUP
+else
+    echo "Group $GROUP already exists"
+fi
+
+if ! id $USER > /dev/null 2>&1; then
+    echo "Creating user $USER"
+    useradd -r -g "$GROUP" -d "$ROOT_DIR" -s /usr/sbin/nologin "$USER"
+else
+    echo "User $USER already exists"
+fi
+
+# Create directories
+
+echo "Creating directories..."
+mkdir -p "$ROOT_DIR"
+mkdir -p "$FS_DIR"
+
+# Set ownership
+
+echo "Setting ownership..."
+chown -R "$USER:$GROUP" "$ROOT_DIR"
+chown -R "$USER:$GROUP" "$FS_DIR"
+
+# Set permissions
+
+echo "Setting permissions..."
+chmod 750 "$ROOT_DIR"
+chmod 750 "$FS_DIR"
+
+# DONE
+
+echo "Setup complete"

@@ -48,4 +48,6 @@ void path_normalize(char path[PATH_MAX]);
 const char* get_config_path();
 const char* get_db_path();
 
+bool mkdir_p(const char* path);
+
 #endif

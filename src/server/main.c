@@ -226,7 +226,7 @@ const ini_t get_default_config_ini() {
     ini_t config = { list_new(ini_section_t) };
     
     ini_set(&config, "server", "port", 5555);
-    ini_set(&config, "server", "root_dir", "/srv/mftp");
+    ini_set(&config, "server", "root_dir", "/srv/mftp/fs");
     ini_set(&config, "server", "max_clients", 10);
     ini_set(&config, "server", "max_command_size", 256);
     ini_set(&config, "server", "timeout", 5000);
@@ -266,7 +266,11 @@ int main(int argc, char* argv[]) {
 
         if (errno == ENOENT) {
             log_warn("Config file not found, saving default config to %s", config_path);
-            ini_save(&config_ini, config_path); // can fail, but I don't care for now...
+            if (!ini_save(&config_ini, config_path)) {
+                log_err("Failed to save default config to %s", config_path);
+                ini_cleanup(&config_ini);
+                return 1;
+            }
         } else {
             log_err("Failed to parse config file, falling back to defaults");
         }
@@ -285,6 +289,14 @@ int main(int argc, char* argv[]) {
     log_trace("  Max command size: %d", s_cfg.max_cmd_size);
     log_trace("  Timeout: %d ms", s_cfg.timeout_ms);
     log_trace("  Allow anonymous: %s", s_cfg.flags.allow_anonymous ? "yes" : "no");
+
+    // verify root directory
+
+    if (access(s_cfg.root_dir, R_OK | W_OK | X_OK) != 0) {
+        log_err("Root directory %s is not accessible", s_cfg.root_dir);
+        ini_cleanup(&config_ini);
+        return 1;
+    }
 
     // load user accounts
 

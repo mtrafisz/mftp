@@ -9,41 +9,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-// for mkdir_p:
-#include <sys/stat.h>
-#include <sys/types.h>
-
 
 // Helper function to trim whitespace
-
-static bool mkdir_p(const char* path) {
-    char* p = NULL;
-    char* copy = strdup(path);
-    if (!copy) {
-        log_syserr("Failed to allocate memory for path copy");
-        return false;
-    }
-
-    for (p = strchr(copy + 1, '/'); p; p = strchr(p + 1, '/')) {
-        *p = '\0';
-        if (mkdir(copy, 0755) == -1 && errno != EEXIST) {
-            log_syserr("Failed to create directory %s", copy);
-            free(copy);
-            return false;
-        }
-        *p = '/';
-    }
-
-    if (mkdir(copy, 0755) == -1 && errno != EEXIST) {
-        log_syserr("Failed to create directory %s", copy);
-        free(copy);
-        return false;
-    }
-
-    free(copy);
-    return true;
-}
-
 static ini_section_t* find_section(ini_t* ini, const char* section) {
     list_iter_t iter = list_iter(&ini->sections);
     ini_section_t* current;
@@ -171,7 +138,7 @@ void ini_cleanup(ini_t* ini) {
     ini_section_t* section;
     
     while ((section = list_next(&iter)) != NULL) {
-        list_clear(&section->entries);
+        if (section->entries.size > 0) list_clear(&section->entries);
     }
     list_clear(&ini->sections);
 }
@@ -264,25 +231,8 @@ bool ini_set_int(ini_t* ini, const char* section, const char* name, int value) {
 bool ini_save(ini_t* ini, const char* filename) {
     FILE* file = fopen(filename, "w+");
     if (!file) {
-        // try to create directory structure
-        char* dir = strdup(filename);
-        char* end = strrchr(dir, '/');
-        if (end) {
-            *end = '\0';
-            if (!mkdir_p(dir)) {
-                log_syserr("Failed to create directory structure for file %s", filename);
-                free(dir);
-                return false;
-            }
-        }
-        free(dir);
-
-        // try again
-        file = fopen(filename, "w+");
-        if (!file) {
-            log_syserr("Failed to open file %s", filename);
-            return false;
-        }
+        log_syserr("Failed to open file %s", filename);
+        return false;
     }
 
     list_iter_t iter = list_iter(&ini->sections);

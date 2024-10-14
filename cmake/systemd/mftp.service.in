@@ -1,0 +1,14 @@
+[Unit]
+Description=MFTP Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=@MFTP_USER@
+Group=@MFTP_GROUP@
+ExecStart=/usr/bin/mftp-server
+Restart=on-failure
+PermissionsStartOnly=true
+
+[Install]
+WantedBy=multi-user.target
